@@ -1,0 +1,112 @@
+const { ActivityType, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, Events } = require('discord.js');
+const fs = require('fs');
+
+const ALLOWED_USER_ID = '1239709013709426708'; // ID do usuário permitido
+
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName('genspoty')
+        .setDescription('Gera links do Spotify e envia para o canal.'),
+    async execute(interaction) {
+        // Verifica se o usuário é permitido
+        if (interaction.user.id !== ALLOWED_USER_ID) {
+            return await interaction.reply({ content: '🚫 Você não tem permissão para usar este comando.', ephemeral: true });
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#ff0000')
+            .setTitle('Gerador de Links Spotify')
+            .setDescription('Clique no botão abaixo para gerar os links.')
+            .setFooter({ text: 'Spotify Link Generator', iconURL: interaction.client.user.displayAvatarURL() })
+            .setTimestamp();
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('generate_links')
+                    .setLabel('Gerar Links')
+                    .setEmoji('<:emoji_13:1325549980336783501>')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setLabel('Entrar no Discord')
+                    .setURL('https://discord.gg/hYtyXVrWXy')
+                    .setEmoji('<:emoji_67:1315406897733435392>')
+                    .setStyle(ButtonStyle.Link)
+            );
+
+        await interaction.reply({ embeds: [embed], components: [row] });
+
+        // Adicionando o listener de interação ao client
+        interaction.client.on(Events.InteractionCreate, async (interaction) => {
+            // Verifica se o usuário é permitido
+            if (interaction.user.id !== ALLOWED_USER_ID) {
+                return await interaction.reply({ content: '🚫 Você não tem permissão para usar este comando.', ephemeral: true });
+            }
+
+            if (interaction.isButton()) {
+                if (interaction.customId === 'generate_links') {
+                    const modal = createModal('link_count_modal', 'Quantos links você deseja gerar?', 'Número de links');
+                    await interaction.showModal(modal);
+                }
+            } else if (interaction.isModalSubmit()) {
+                await handleModalSubmit(interaction);
+            }
+        });
+    },
+};
+
+// Função para criar um modal genérico
+const createModal = (customId, title, label) => {
+    return new ModalBuilder()
+        .setCustomId(customId)
+        .setTitle(title)
+        .addComponents(
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('link_count') // ID do campo de entrada
+                    .setLabel(label)
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true)
+            )
+        );
+};
+
+// Função para lidar com a submissão do modal
+const handleModalSubmit = async (interaction) => {
+    const customId = interaction.customId;
+
+    if (customId === 'link_count_modal') {
+        const linkCount = parseInt(interaction.fields.getTextInputValue('link_count')); // Usando o ID correto
+
+        if (isNaN(linkCount) || linkCount <= 0) {
+            return interaction.reply({ content: '❌ | Por favor, insira um número válido.', ephemeral: true });
+        }
+
+        const links = [];
+        for (let j = 0; j < linkCount; j++) {
+            const code = generateRandomString(10);
+            const url = `https://www.spotify.com/br-pt/ppt/microsoft/?code=${code}`;
+            links.push(url);
+        }
+
+        // Cria um arquivo .txt com os links
+        const filePath = './links.txt';
+        fs.writeFileSync(filePath, links.join('\n'));
+
+        // Anexa o arquivo na resposta
+        await interaction.reply({ content: '✅ | Links gerados! Aqui está o arquivo:', files: [filePath], ephemeral: true });
+
+        // Remove o arquivo após o envio
+        fs.unlinkSync(filePath);
+    }
+};
+
+function generateRandomString(length) {
+    const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < length; i++) {
+        const randomIndex = Math.floor(Math.random() * characters.length);
+        code += characters[randomIndex];
+    }
+    return code;
+}
